@@ -295,7 +295,7 @@ PY
 			echo "✓ uv.lock generated successfully"
 
 			echo "Exporting requirements.txt from uv.lock..."
-			uv export --format requirements-txt -o requirements.txt \
+			uv export --format requirements-txt --no-hashes -o requirements.txt \
 				${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
 				--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
 			if [[ $? -ne 0 ]]; then
@@ -325,16 +325,19 @@ PY
 	echo "Index URL: ${PIP_MIRROR_URL}"
 	[ -n "$PIP_PLATFORM" ] && echo "Platform: ${RAW_PLATFORM}"
 
-	# Two-pass pip download: first pass gets binary wheels for the target platform;
-	# second pass (cross-platform only) retries without --only-binary so that
-	# sdist-only pure-Python packages (e.g. docopt) are also captured.
+	# pip two-pass download helper (used when uv is unavailable):
+	# pass 1 — binary wheels for the target platform (--only-binary required by pip for --platform)
+	# pass 2 — --no-deps without platform constraint, picks up sdist-only pure-Python packages
+	#           --no-deps is safe because uv export already lists all transitive deps explicitly;
+	#           it also satisfies pip's rule that requires --no-deps OR --only-binary when
+	#           platform/interpreter constraints are present in the requirements file
 	pip_download_with_fallback() {
 		local status=0
 		${PIP_CMD} download ${PIP_PLATFORM} --prefer-binary -r requirements.txt -d ./wheels \
 			--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com || status=$?
 		if [[ $status -ne 0 ]] && [[ -n "$PIP_PLATFORM" ]]; then
-			echo "⚠ Binary-only pass incomplete; retrying without --only-binary for sdist-only packages..."
-			${PIP_CMD} download --prefer-binary -r requirements.txt -d ./wheels \
+			echo "⚠ Binary-only pass incomplete; retrying with --no-deps for sdist-only packages..."
+			${PIP_CMD} download --no-deps --prefer-binary -r requirements.txt -d ./wheels \
 				--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
 			return $?
 		fi
@@ -345,20 +348,28 @@ PY
 	echo "Downloading wheels to ./wheels/..."
 	if command -v uv &> /dev/null; then
 		echo "Using uv pip download for consistent resolver..."
+		UV_DL_STATUS=0
 		uv pip download \
 			-r requirements.txt \
 			-o ./wheels \
 			${RAW_PLATFORM:+--python-platform ${RAW_PLATFORM}} \
 			--python-version "${UV_PY_VERSION}" \
 			${UV_PRERELEASE_FLAG} \
-			--index-url "${PIP_MIRROR_URL}"
-		if [[ $? -ne 0 ]]; then
-			echo "⚠ uv pip download failed, falling back to pip..."
-			pip_download_with_fallback
-			if [[ $? -ne 0 ]]; then
-				echo "✗ Error: Failed to download dependencies"
-				exit 1
-			fi
+			--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
+		# If cross-platform download failed, retry without --python-platform to pick up
+		# sdist-only pure-Python packages that have no platform-specific wheel
+		if [[ $UV_DL_STATUS -ne 0 ]] && [[ -n "$RAW_PLATFORM" ]]; then
+			echo "⚠ Cross-platform uv download incomplete; retrying without --python-platform for sdist-only packages..."
+			uv pip download \
+				-r requirements.txt \
+				-o ./wheels \
+				--python-version "${UV_PY_VERSION}" \
+				${UV_PRERELEASE_FLAG} \
+				--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
+		fi
+		if [[ $UV_DL_STATUS -ne 0 ]]; then
+			echo "✗ Error: uv pip download failed"
+			exit 1
 		fi
 	else
 		pip_download_with_fallback
