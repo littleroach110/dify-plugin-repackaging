@@ -1,5 +1,7 @@
 ## Dify Plugin Downloading and Repackaging (uv-compatible fork)
 
+**English** | [中文](README_CN.md)
+
 > **Fork of [junjiem/dify-plugin-repackaging](https://github.com/junjiem/dify-plugin-repackaging)**
 > with improvements for Dify 1.x plugins that use **uv** as the package manager.
 > Additional reference: [xcsf/dify-plugin-repackaging-python](https://github.com/xcsf/dify-plugin-repackaging-python).
