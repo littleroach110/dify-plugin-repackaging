@@ -1,73 +1,93 @@
-## Dify 1.0 Plugin Downloading and Repackaging
+## Dify Plugin Downloading and Repackaging (uv-compatible fork)
+
+> **Fork of [junjiem/dify-plugin-repackaging](https://github.com/junjiem/dify-plugin-repackaging)**
+> with improvements for Dify 1.x plugins that use **uv** as the package manager.
+> Additional reference: [xcsf/dify-plugin-repackaging-python](https://github.com/xcsf/dify-plugin-repackaging-python).
+
+### What's improved in this fork
+
+The original project used `pip download` for wheel packaging. Modern Dify plugins
+(`pyproject.toml` + `uv`) broke this flow in several ways — this fork fixes them:
+
+| Issue | Fix |
+|-------|-----|
+| `[tool.uv]` offline config was injected **before** `uv lock`, causing `uv lock` to fail (no index, no wheels) | Injection is now done **after** wheels are downloaded |
+| Bundled `uv.lock` had hashes from the online index; `uv sync` at runtime rejected them | `uv lock` is re-run offline after wheel download so hashes match exactly |
+| `pip download --only-binary=:all:` silently excluded sdist-only pure-Python packages (e.g. `docopt`) | Two-pass download: `uv pip download` with platform, then retry without `--python-platform` for sdist-only packages; pip fallback uses `--no-deps` |
+| `curl` returned exit code 0 on HTTP 4xx/5xx; script proceeded with an invalid file | HTTP status code check + `unzip -t` integrity validation before extraction |
+
+---
+
 ### How To Use With Github Action
 1. Fork this repository
 2. Open the GitHub page of your forked repository
-[https://github.com/{your_username}/dify-sandbox-python-requirements-download]()
-3. Run workflow
+3. Run workflow (Actions → Repackage Dify Plugin)
+
 ![run_github_action_1](images/run_github_action_1.png)
 ![run_github_action_2](images/run_github_action_2.png)
+
 4. Download artifact
+
 ![run_github_action_3](images/run_github_action_3.png)
 
 ### How To Use With Docker
 
-1.change param in dockerfile
+1. Change param in Dockerfile
 
 ```dockerfile
-CMD ["./plugin_repackaging.sh", "-p", "manylinux_2_17_x86_64", "market", "antv", "visualization", "0.1.7"] 
+CMD ["./plugin_repackaging.sh", "-p", "manylinux_2_17_x86_64", "market", "antv", "visualization", "0.1.7"]
 ```
 
-2.build
+2. Build
+
 ```bash
 docker build -t dify-plugin-repackaging .
 ```
 
+3. Run
 
-3.run
-
-linux
+Linux
 ```bash
 docker run -v $(pwd):/app dify-plugin-repackaging
 ```
-windows
+Windows
 ```cmd
 docker run -v %cd%:/app dify-plugin-repackaging
 ```
-4.override CMD(opt)
 
-linux
+4. Override CMD (optional)
+
+Linux
 ```bash
 docker run -v $(pwd):/app dify-plugin-repackaging ./plugin_repackaging.sh -p manylinux_2_17_x86_64 market antv visualization 0.1.7
 ```
 
+---
+
 ### Prerequisites
 
-Operating System: Linux amd64/aarch64, MacOS x86_64/arm64
+- **OS**: Linux amd64/aarch64, macOS x86_64/arm64
+- **Python**: 3.12.x (same as `dify-plugin-daemon`)
+- **uv**: recommended (`pip install uv`); required for `pyproject.toml`-based plugins
 
-**Notes**: The script uses `yum` to install `unzip` which is only avialable on RPM-based Linux systems(such as `Red Hat Enterprise Linux`, `CentOS`, `Fedora`, and `Oracle Linux`), and is now replaced by `dnf` in latest version. To use the script on other distributions, please install `unzip` command in advance.
-
-**注意：**本脚本使用`yum`安装`unzip`命令，这只适用于基于RPM的Linux系统（如`Red Hat Enterprise Linux`, `CentOS`, `Fedora`, and `Oracle Linux`）。并且在较新的分发版中，它已被`dnf`所替代。
-因此，当使用其他Linux分发版或者无法使用`yum`时，请事先安装`unzip`命令。
-
-Python version: Should be as the same as the version in `dify-plugin-daemon` which is currently 3.12.x
-
+> **Note**: The script uses `yum` to install `unzip` on RPM-based systems. On other
+> distributions, install `unzip` in advance.
 
 #### Clone
+
 ```shell
-git clone https://github.com/junjiem/dify-plugin-repackaging.git
+git clone https://github.com/littleroach110/dify-plugin-repackaging.git
 ```
 
-
+---
 
 ### Description
 
-#### From the Dify Marketplace downloading and repackaging
+#### From the Dify Marketplace
 
 ![market](images/market.png)
 
 ##### Example
-
-![market-example](images/market-example.png)
 
 ```shell
 ./plugin_repackaging.sh market langgenius agent 0.0.9
@@ -75,15 +95,11 @@ git clone https://github.com/junjiem/dify-plugin-repackaging.git
 
 ![langgenius-agent](images/langgenius-agent.png)
 
-
-
-#### From the Github downloading and repackaging
+#### From GitHub
 
 ![github](images/github.png)
 
 ##### Example
-
-![github-example](images/github-example.png)
 
 ```shell
 ./plugin_repackaging.sh github junjiem/dify-plugin-agent-mcp_sse 0.0.1 agent-mcp_see.difypkg
@@ -91,9 +107,7 @@ git clone https://github.com/junjiem/dify-plugin-repackaging.git
 
 ![junjiem-mcp_sse](images/junjiem-mcp_sse.png)
 
-
-
-#### Local Dify package repackaging
+#### Local .difypkg repackaging
 
 ![local](images/local.png)
 
@@ -105,44 +119,35 @@ git clone https://github.com/junjiem/dify-plugin-repackaging.git
 
 ![db_query](images/db_query.png)
 
-#### Platform Crossing Repacking
+#### Cross-platform repackaging
 
-For repacking the plugins in different platforms between operating and running environment, 
-please using `-p` option with a pip platform string.
+Use `-p` with a pip platform string to build for a different target OS/arch than the current machine.
 
-Typically, uses `manylinux2014_x86_64` for plugins running on an `x86_64/amd64` OS, 
-and `manylinux2014_aarch64` for `aarch64/arm64`.
+| Target | Flag |
+|--------|------|
+| Linux x86_64 | `-p manylinux_2_17_x86_64` |
+| Linux arm64  | `-p manylinux_2_17_aarch64` |
 
-### Update Dify platform env  Dify平台放开限制
+---
 
-- your .env configuration file: Change `FORCE_VERIFYING_SIGNATURE` to `false` , the Dify platform will allow the installation of all plugins that are not listed in the Dify Marketplace.
+### Update Dify platform settings / Dify 平台放开限制
 
-- your .env configuration file: Change `PLUGIN_MAX_PACKAGE_SIZE` to `524288000` , and the Dify platform will allow the installation of plug-ins within 500M.
+- `.env`: set `FORCE_VERIFYING_SIGNATURE=false` — allows installing plugins not listed in the Dify Marketplace.
+- `.env`: set `PLUGIN_MAX_PACKAGE_SIZE=524288000` — allows plugins up to 500 MB.
+- `.env`: set `NGINX_CLIENT_MAX_BODY_SIZE=500M` — allows uploads up to 500 MB.
 
-- your .env configuration file: Change `NGINX_CLIENT_MAX_BODY_SIZE` to `500M` , and the Nginx client will allow uploading content up to 500M in size.
+---
 
+### Installing Plugins via Local / 通过本地安装插件
 
-
-- 在 .env 配置文件将 `FORCE_VERIFYING_SIGNATURE` 改为 `false` ，Dify 平台将允许安装所有未在 Dify Marketplace 上架（审核）的插件。
-
-- 在 .env 配置文件将 `PLUGIN_MAX_PACKAGE_SIZE` 增大为 `524288000`，Dify 平台将允许安装 500M 大小以内的插件。
-
-- 在 .env 配置文件将 `NGINX_CLIENT_MAX_BODY_SIZE` 增大为 `500M`，Nginx客户端将允许上传 500M 大小以内的内容。
-
-
-
-
-### Installing Plugins via Local 通过本地安装插件
-
-Visit the Dify platform's plugin management page, choose Local Package File to complete installation.
+Visit the Dify platform's plugin management page and choose **Local Package File**.
 
 访问 Dify 平台的插件管理页，选择通过本地插件完成安装。
 
 ![install_plugin_via_local](./images/install_plugin_via_local.png)
 
-
+---
 
 ### Star history
 
 [![Star History Chart](https://api.star-history.com/svg?repos=junjiem/dify-plugin-repackaging&type=Date)](https://star-history.com/#junjiem/dify-plugin-repackaging&Date)
-
