@@ -302,8 +302,7 @@ PY
 	if [ -f "pyproject.toml" ] && [ ! -f "requirements.txt" ]; then
 		if command -v uv &> /dev/null; then
 			echo "Generating uv.lock file..."
-			uv lock ${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
-				--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
+			uv lock --python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
 			if [[ $? -ne 0 ]]; then
 				echo "✗ Error: uv lock failed"
 				exit 1
@@ -419,8 +418,7 @@ PY
 	if [ -f "pyproject.toml" ] && command -v uv &> /dev/null; then
 		echo "Regenerating uv.lock from local wheels (offline)..."
 		[ -f "uv.lock" ] && rm -f uv.lock
-		uv lock ${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
-			--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
+		uv lock --python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
 		if [[ $? -ne 0 ]]; then
 			echo "✗ Error: Failed to regenerate uv.lock from local wheels"
 			echo "  Some packages may be missing from ./wheels — check download step"

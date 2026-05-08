@@ -15,6 +15,7 @@ The original project used `pip download` for wheel packaging. Modern Dify plugin
 | Bundled `uv.lock` had hashes from the online index; `uv sync` at runtime rejected them | `uv lock` is re-run offline after wheel download so hashes match exactly |
 | `pip download --only-binary=:all:` silently excluded sdist-only pure-Python packages (e.g. `docopt`) | Two-pass download: `uv pip download` with platform, then retry without `--python-platform` for sdist-only packages; pip fallback uses `--no-deps` |
 | `curl` returned exit code 0 on HTTP 4xx/5xx; script proceeded with an invalid file | HTTP status code check + `unzip -t` integrity validation before extraction |
+| `uv lock` was called with `--python-platform`, which it does not accept (only `uv export` / `uv pip` support this flag); lock step failed for plugins that ship both `pyproject.toml` and `requirements.txt` | Removed `--python-platform` from all `uv lock` calls; platform filtering belongs to `uv export` and `uv pip download` |
 
 ---
 
