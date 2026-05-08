@@ -283,12 +283,6 @@ PY
 	echo "Step 2: Processing dependencies"
 	echo "=========================================="
 
-	# Inject [tool.uv] config to enable offline wheel usage
-	if [ -f "pyproject.toml" ]; then
-		echo "Found pyproject.toml, injecting [tool.uv] configuration..."
-		inject_uv_into_pyproject "pyproject.toml"
-	fi
-
 	if [ -f "pyproject.toml" ] && [ ! -f "requirements.txt" ]; then
 		if command -v uv &> /dev/null; then
 			echo "Generating uv.lock file..."
@@ -333,11 +327,31 @@ PY
 
 	mkdir -p ./wheels
 	echo "Downloading wheels to ./wheels/..."
-	${PIP_CMD} download ${PIP_PLATFORM} --prefer-binary -r requirements.txt -d ./wheels \
-		--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
-	if [[ $? -ne 0 ]]; then
-		echo "✗ Error: Failed to download dependencies"
-		exit 1
+	if command -v uv &> /dev/null; then
+		echo "Using uv pip download for consistent resolver..."
+		uv pip download \
+			-r requirements.txt \
+			-o ./wheels \
+			${RAW_PLATFORM:+--python-platform ${RAW_PLATFORM}} \
+			--python-version "${UV_PY_VERSION}" \
+			${UV_PRERELEASE_FLAG} \
+			--index-url "${PIP_MIRROR_URL}"
+		if [[ $? -ne 0 ]]; then
+			echo "⚠ uv pip download failed, falling back to pip..."
+			${PIP_CMD} download ${PIP_PLATFORM} --prefer-binary -r requirements.txt -d ./wheels \
+				--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
+			if [[ $? -ne 0 ]]; then
+				echo "✗ Error: Failed to download dependencies"
+				exit 1
+			fi
+		fi
+	else
+		${PIP_CMD} download ${PIP_PLATFORM} --prefer-binary -r requirements.txt -d ./wheels \
+			--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
+		if [[ $? -ne 0 ]]; then
+			echo "✗ Error: Failed to download dependencies"
+			exit 1
+		fi
 	fi
 
 	# Count downloaded wheels
@@ -345,9 +359,36 @@ PY
 	echo "✓ Downloaded $WHEEL_COUNT wheel packages"
 
 	# ============================================
-	# Step 4: Update requirements.txt for offline usage
+	# Step 4: Configure offline mode
 	# ============================================
 	echo ""
+	echo "=========================================="
+	echo "Step 4: Configuring offline mode"
+	echo "=========================================="
+
+	# Inject [tool.uv] offline config into pyproject.toml AFTER wheels are downloaded
+	if [ -f "pyproject.toml" ]; then
+		echo "Injecting [tool.uv] offline configuration into pyproject.toml..."
+		inject_uv_into_pyproject "pyproject.toml"
+	fi
+
+	# For uv-based plugins: regenerate uv.lock using local wheels so hashes match exactly.
+	# The first uv lock (Step 2) resolved deps online; now we re-lock with no-index +
+	# find-links so the bundled uv.lock points to the downloaded wheels.
+	if [ -f "pyproject.toml" ] && command -v uv &> /dev/null; then
+		echo "Regenerating uv.lock from local wheels (offline)..."
+		[ -f "uv.lock" ] && rm -f uv.lock
+		uv lock ${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
+			--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
+		if [[ $? -ne 0 ]]; then
+			echo "✗ Error: Failed to regenerate uv.lock from local wheels"
+			echo "  Some packages may be missing from ./wheels — check download step"
+			exit 1
+		fi
+		echo "✓ uv.lock regenerated from local wheels"
+	fi
+
+	# Also patch requirements.txt for pip-based fallback installation
 	echo "Updating requirements.txt for offline installation..."
 	if [[ "linux" == "$OS_TYPE" ]]; then
 		sed -i '1i\--no-index --find-links=./wheels/' requirements.txt
@@ -365,7 +406,7 @@ PY
 	# ============================================
 	echo ""
 	echo "=========================================="
-	echo "Step 4: Packaging plugin"
+	echo "Step 5: Packaging plugin"
 	echo "=========================================="
 
 	cd ${CURR_DIR} || exit 1
