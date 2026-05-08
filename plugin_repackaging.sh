@@ -53,14 +53,22 @@ market(){
 	echo "Version: ${PLUGIN_VERSION}"
 	echo "URL: ${PLUGIN_DOWNLOAD_URL}"
 
-	curl -L -o ${PLUGIN_PACKAGE_PATH} ${PLUGIN_DOWNLOAD_URL}
-	if [[ $? -ne 0 ]]; then
-		echo "✗ Error: Download failed"
+	HTTP_STATUS=$(curl -L -w "%{http_code}" -o "${PLUGIN_PACKAGE_PATH}" "${PLUGIN_DOWNLOAD_URL}")
+	if [[ $? -ne 0 ]] || [[ "${HTTP_STATUS}" != "200" ]]; then
+		echo "✗ Error: Download failed (HTTP ${HTTP_STATUS})"
 		echo "  Please check the plugin author, name, and version"
+		echo "  URL: ${PLUGIN_DOWNLOAD_URL}"
+		rm -f "${PLUGIN_PACKAGE_PATH}"
 		exit 1
 	fi
 
 	DOWNLOADED_SIZE=$(du -h "${PLUGIN_PACKAGE_PATH}" | cut -f1)
+	if ! unzip -t "${PLUGIN_PACKAGE_PATH}" &> /dev/null; then
+		echo "✗ Error: Downloaded file is not a valid .difypkg archive (${DOWNLOADED_SIZE})"
+		echo "  The server may have returned an error page instead of the plugin"
+		rm -f "${PLUGIN_PACKAGE_PATH}"
+		exit 1
+	fi
 	echo "✓ Downloaded successfully (${DOWNLOADED_SIZE})"
 
 	repackage ${PLUGIN_PACKAGE_PATH}
@@ -95,14 +103,22 @@ github(){
 	echo "Asset: ${ASSETS_NAME}"
 	echo "URL: ${PLUGIN_DOWNLOAD_URL}"
 
-	curl -L -o ${PLUGIN_PACKAGE_PATH} ${PLUGIN_DOWNLOAD_URL}
-	if [[ $? -ne 0 ]]; then
-		echo "✗ Error: Download failed"
+	HTTP_STATUS=$(curl -L -w "%{http_code}" -o "${PLUGIN_PACKAGE_PATH}" "${PLUGIN_DOWNLOAD_URL}")
+	if [[ $? -ne 0 ]] || [[ "${HTTP_STATUS}" != "200" ]]; then
+		echo "✗ Error: Download failed (HTTP ${HTTP_STATUS})"
 		echo "  Please check the GitHub repo, release title, and asset name"
+		echo "  URL: ${PLUGIN_DOWNLOAD_URL}"
+		rm -f "${PLUGIN_PACKAGE_PATH}"
 		exit 1
 	fi
 
 	DOWNLOADED_SIZE=$(du -h "${PLUGIN_PACKAGE_PATH}" | cut -f1)
+	if ! unzip -t "${PLUGIN_PACKAGE_PATH}" &> /dev/null; then
+		echo "✗ Error: Downloaded file is not a valid .difypkg archive (${DOWNLOADED_SIZE})"
+		echo "  The server may have returned an error page instead of the plugin"
+		rm -f "${PLUGIN_PACKAGE_PATH}"
+		exit 1
+	fi
 	echo "✓ Downloaded successfully (${DOWNLOADED_SIZE})"
 
 	repackage ${PLUGIN_PACKAGE_PATH}
