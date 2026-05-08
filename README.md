@@ -9,14 +9,14 @@
 The original project used `pip download` for wheel packaging. Modern Dify plugins
 (`pyproject.toml` + `uv`) broke this flow in several ways — this fork fixes them:
 
-| Issue | Fix |
-|-------|-----|
-| `[tool.uv]` offline config was injected **before** `uv lock`, causing `uv lock` to fail (no index, no wheels) | Injection is now done **after** wheels are downloaded |
-| Bundled `uv.lock` had hashes from the online index; `uv sync` at runtime rejected them | `uv lock` is re-run offline after wheel download so hashes match exactly |
-| `pip download --only-binary=:all:` silently excluded sdist-only pure-Python packages (e.g. `docopt`) | Two-pass download: `uv pip download` with platform, then retry without `--python-platform` for sdist-only packages; pip fallback uses `--no-deps` |
-| `curl` returned exit code 0 on HTTP 4xx/5xx; script proceeded with an invalid file | HTTP status code check + `unzip -t` integrity validation before extraction |
-| `uv lock` was called with `--python-platform` and `--python-version`, neither of which it accepts; only `uv export` / `uv pip` support those flags | Removed `--python-platform`; replaced `--python-version` with `--python` in all `uv lock` calls |
-| Offline `uv lock` regeneration failed for plugins with dev dependencies (e.g. `black`) because dev packages are intentionally not downloaded as wheels | Removed offline re-lock entirely; downloaded wheels share the same hashes as the original `uv.lock` (same PyPI source), so regeneration is unnecessary; added `--no-dev` to `uv export` to exclude dev deps from the wheel download |
+| # | Issue | Fix |
+|---|-------|-----|
+| 1 | `[tool.uv]` offline config (`no-index`, `find-links`) was injected into `pyproject.toml` **before** `uv lock`, so `uv lock` immediately failed — no index, no local wheels yet | Move injection to **after** wheel download; `uv lock` runs cleanly online first |
+| 2 | `pip download --only-binary=:all:` silently excluded sdist-only pure-Python packages (e.g. `docopt`) causing download failure | Prefer `uv pip download`; if cross-platform download fails, retry without `--python-platform` to capture sdist-only packages; pip fallback uses `--no-deps` on the second pass |
+| 3 | `uv pip download` subcommand not available in older uv builds; script hard-failed | Added `uv pip download --help` capability probe; falls back to pip when unavailable |
+| 4 | `curl` exits 0 even on HTTP 4xx/5xx, so an error-page HTML was silently passed to `unzip` | Added HTTP status-code check (`-w "%{http_code}"`) and `unzip -t` integrity validation before extraction |
+| 5 | `uv lock` does not accept `--python-platform` or `--python-version` (only `uv export` / `uv pip` do); lock step failed for any plugin that ships both `pyproject.toml` and `requirements.txt` | Removed `--python-platform` from `uv lock`; replaced `--python-version` with `--python` |
+| 6 | Offline `uv lock` regeneration failed for plugins with dev dependencies (e.g. `black`, `pytest`) because dev packages are not downloaded as wheels | Removed offline re-lock entirely — wheels downloaded from PyPI carry the same hashes as the original `uv.lock`, so no regeneration is needed; added `--no-dev` to `uv export` to exclude dev deps from the wheel set |
 
 ---
 
