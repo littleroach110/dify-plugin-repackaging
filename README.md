@@ -16,6 +16,7 @@ The original project used `pip download` for wheel packaging. Modern Dify plugin
 | `pip download --only-binary=:all:` silently excluded sdist-only pure-Python packages (e.g. `docopt`) | Two-pass download: `uv pip download` with platform, then retry without `--python-platform` for sdist-only packages; pip fallback uses `--no-deps` |
 | `curl` returned exit code 0 on HTTP 4xx/5xx; script proceeded with an invalid file | HTTP status code check + `unzip -t` integrity validation before extraction |
 | `uv lock` was called with `--python-platform` and `--python-version`, neither of which it accepts; only `uv export` / `uv pip` support those flags | Removed `--python-platform`; replaced `--python-version` with `--python` in all `uv lock` calls |
+| Offline `uv lock` regeneration failed for plugins with dev dependencies (e.g. `black`) because dev packages are intentionally not downloaded as wheels | Removed offline re-lock entirely; downloaded wheels share the same hashes as the original `uv.lock` (same PyPI source), so regeneration is unnecessary; added `--no-dev` to `uv export` to exclude dev deps from the wheel download |
 
 ---
 

@@ -310,7 +310,7 @@ PY
 			echo "✓ uv.lock generated successfully"
 
 			echo "Exporting requirements.txt from uv.lock..."
-			uv export --format requirements-txt --no-hashes -o requirements.txt \
+			uv export --format requirements-txt --no-hashes --no-dev -o requirements.txt \
 				${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
 				--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
 			if [[ $? -ne 0 ]]; then
@@ -412,20 +412,13 @@ PY
 		inject_uv_into_pyproject "pyproject.toml"
 	fi
 
-	# For uv-based plugins: regenerate uv.lock using local wheels so hashes match exactly.
-	# The first uv lock (Step 2) resolved deps online; now we re-lock with no-index +
-	# find-links so the bundled uv.lock points to the downloaded wheels.
-	if [ -f "pyproject.toml" ] && command -v uv &> /dev/null; then
-		echo "Regenerating uv.lock from local wheels (offline)..."
-		[ -f "uv.lock" ] && rm -f uv.lock
-		uv lock --python "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
-		if [[ $? -ne 0 ]]; then
-			echo "✗ Error: Failed to regenerate uv.lock from local wheels"
-			echo "  Some packages may be missing from ./wheels — check download step"
-			exit 1
-		fi
-		echo "✓ uv.lock regenerated from local wheels"
-	fi
+	# uv.lock is intentionally NOT regenerated here.
+	# The wheels downloaded in Step 3 come from the same PyPI index that produced the
+	# original uv.lock, so their hashes are already consistent.  The [tool.uv] injection
+	# above (no-index + find-links) is all that is needed for Dify's "uv sync" to resolve
+	# packages from ./wheels/ at runtime.  Re-running "uv lock" offline would fail for
+	# plugins that declare dev dependencies (e.g. black, pytest) because those are
+	# intentionally excluded from ./wheels/ as they are not needed at runtime.
 
 	# Also patch requirements.txt for pip-based fallback installation
 	echo "Updating requirements.txt for offline installation..."
