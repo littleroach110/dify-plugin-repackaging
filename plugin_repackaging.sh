@@ -325,6 +325,22 @@ PY
 	echo "Index URL: ${PIP_MIRROR_URL}"
 	[ -n "$PIP_PLATFORM" ] && echo "Platform: ${RAW_PLATFORM}"
 
+	# Two-pass pip download: first pass gets binary wheels for the target platform;
+	# second pass (cross-platform only) retries without --only-binary so that
+	# sdist-only pure-Python packages (e.g. docopt) are also captured.
+	pip_download_with_fallback() {
+		local status=0
+		${PIP_CMD} download ${PIP_PLATFORM} --prefer-binary -r requirements.txt -d ./wheels \
+			--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com || status=$?
+		if [[ $status -ne 0 ]] && [[ -n "$PIP_PLATFORM" ]]; then
+			echo "⚠ Binary-only pass incomplete; retrying without --only-binary for sdist-only packages..."
+			${PIP_CMD} download --prefer-binary -r requirements.txt -d ./wheels \
+				--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
+			return $?
+		fi
+		return $status
+	}
+
 	mkdir -p ./wheels
 	echo "Downloading wheels to ./wheels/..."
 	if command -v uv &> /dev/null; then
@@ -338,16 +354,14 @@ PY
 			--index-url "${PIP_MIRROR_URL}"
 		if [[ $? -ne 0 ]]; then
 			echo "⚠ uv pip download failed, falling back to pip..."
-			${PIP_CMD} download ${PIP_PLATFORM} --prefer-binary -r requirements.txt -d ./wheels \
-				--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
+			pip_download_with_fallback
 			if [[ $? -ne 0 ]]; then
 				echo "✗ Error: Failed to download dependencies"
 				exit 1
 			fi
 		fi
 	else
-		${PIP_CMD} download ${PIP_PLATFORM} --prefer-binary -r requirements.txt -d ./wheels \
-			--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
+		pip_download_with_fallback
 		if [[ $? -ne 0 ]]; then
 			echo "✗ Error: Failed to download dependencies"
 			exit 1
