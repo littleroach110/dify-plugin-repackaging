@@ -299,8 +299,12 @@ PY
 	echo "Step 2: Processing dependencies"
 	echo "=========================================="
 
-	if [ -f "pyproject.toml" ] && [ ! -f "requirements.txt" ]; then
-		if command -v uv &> /dev/null; then
+	# Always derive requirements.txt from pyproject.toml when uv is available.
+	# Shipped requirements.txt files are often incomplete — they may omit transitive
+	# deps of framework packages (e.g. dify-plugin → socksio) that the plugin author
+	# expected the Dify runtime to supply.  uv export resolves the full closure.
+	if [ -f "pyproject.toml" ] && command -v uv &> /dev/null; then
+		if [ ! -f "uv.lock" ]; then
 			echo "Generating uv.lock file..."
 			uv lock --python "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
 			if [[ $? -ne 0 ]]; then
@@ -308,24 +312,25 @@ PY
 				exit 1
 			fi
 			echo "✓ uv.lock generated successfully"
-
-			echo "Exporting requirements.txt from uv.lock..."
-			uv export --format requirements-txt --no-hashes --no-dev -o requirements.txt \
-				${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
-				--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
-			if [[ $? -ne 0 ]]; then
-				echo "✗ Error: uv export failed"
-				exit 1
-			fi
-			echo "✓ requirements.txt generated successfully"
 		else
-			echo "✗ Error: pyproject.toml found but uv is not installed"
-			echo "  Please install uv: pip install uv"
-			echo "  Or commit requirements.txt with the plugin"
+			echo "✓ Using existing uv.lock"
+		fi
+
+		echo "Exporting complete requirements.txt from uv.lock (all transitive deps, no dev)..."
+		uv export --format requirements-txt --no-hashes --no-dev -o requirements.txt \
+			${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
+			--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
+		if [[ $? -ne 0 ]]; then
+			echo "✗ Error: uv export failed"
 			exit 1
 		fi
+		echo "✓ requirements.txt generated successfully"
 	elif [ -f "requirements.txt" ]; then
-		echo "✓ Using existing requirements.txt"
+		echo "✓ Using existing requirements.txt (uv unavailable; transitive deps may be incomplete)"
+	elif [ -f "pyproject.toml" ]; then
+		echo "✗ Error: pyproject.toml found but uv is not installed and no requirements.txt exists"
+		echo "  Please install uv: pip install uv"
+		exit 1
 	fi
 
 	[ ! -f "requirements.txt" ] && echo "✗ Error: requirements.txt not found" && exit 1

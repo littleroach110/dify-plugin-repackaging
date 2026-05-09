@@ -19,6 +19,7 @@ The original project used `pip download` for wheel packaging. Modern Dify plugin
 | 4 | `curl` exits 0 even on HTTP 4xx/5xx, so an error-page HTML was silently passed to `unzip` | Added HTTP status-code check (`-w "%{http_code}"`) and `unzip -t` integrity validation before extraction |
 | 5 | `uv lock` does not accept `--python-platform` or `--python-version` (only `uv export` / `uv pip` do); lock step failed for any plugin that ships both `pyproject.toml` and `requirements.txt` | Removed `--python-platform` from `uv lock`; replaced `--python-version` with `--python` |
 | 6 | Offline `uv lock` regeneration failed for plugins with dev dependencies (e.g. `black`, `pytest`) because dev packages are not downloaded as wheels | Removed offline re-lock entirely — wheels downloaded from PyPI carry the same hashes as the original `uv.lock`, so no regeneration is needed; added `--no-dev` to `uv export` to exclude dev deps from the wheel set |
+| 7 | Plugins that ship both `pyproject.toml` and `requirements.txt` had their shipped `requirements.txt` used as-is; it often omits transitive deps of framework packages (e.g. `dify-plugin → socksio`), causing `uv sync` to fail at runtime with `no-index = true` | When `pyproject.toml` is present and uv is available, always regenerate `requirements.txt` via `uv export` for the full transitive closure; reuses existing `uv.lock` if present, otherwise generates a fresh one online |
 
 ---
 
