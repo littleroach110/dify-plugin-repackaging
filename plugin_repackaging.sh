@@ -367,7 +367,7 @@ PY
 
 	mkdir -p ./wheels
 	echo "Downloading wheels to ./wheels/..."
-	if command -v uv &> /dev/null && uv pip download --help &> /dev/null 2>&1; then
+	if command -v uv &> /dev/null; then
 		echo "Using uv pip download for consistent resolver..."
 		UV_DL_STATUS=0
 		uv pip download \
