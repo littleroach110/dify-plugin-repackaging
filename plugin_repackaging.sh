@@ -304,17 +304,18 @@ PY
 	# deps of framework packages (e.g. dify-plugin → socksio) that the plugin author
 	# expected the Dify runtime to supply.  uv export resolves the full closure.
 	if [ -f "pyproject.toml" ] && command -v uv &> /dev/null; then
-		if [ ! -f "uv.lock" ]; then
-			echo "Generating uv.lock file..."
-			uv lock --python "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
-			if [[ $? -ne 0 ]]; then
-				echo "✗ Error: uv lock failed"
-				exit 1
-			fi
-			echo "✓ uv.lock generated successfully"
-		else
-			echo "✓ Using existing uv.lock"
+		# Always run uv lock even if uv.lock already exists.
+		# Plugins built in a Dify dev environment often ship an incomplete uv.lock that
+		# omits transitive deps of pre-installed packages (e.g. dify-plugin → socksio).
+		# uv lock updates the lock file incrementally: existing pinned versions are kept,
+		# but missing transitive deps are resolved and added.
+		echo "Resolving/updating uv.lock..."
+		uv lock --python "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
+		if [[ $? -ne 0 ]]; then
+			echo "✗ Error: uv lock failed"
+			exit 1
 		fi
+		echo "✓ uv.lock resolved successfully"
 
 		echo "Exporting complete requirements.txt from uv.lock (all transitive deps, no dev)..."
 		uv export --format requirements-txt --no-hashes --no-dev -o requirements.txt \

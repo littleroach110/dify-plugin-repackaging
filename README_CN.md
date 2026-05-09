@@ -18,7 +18,7 @@
 | 4 | `curl` 在 HTTP 4xx/5xx 时仍返回退出码 0，错误响应的 HTML 页面被静默传给 `unzip` | 增加 HTTP 状态码检查（`-w "%{http_code}"`）和 `unzip -t` 完整性校验，在解压前拦截无效文件 |
 | 5 | `uv lock` 不接受 `--python-platform` 和 `--python-version` 参数（这两个参数只属于 `uv export` / `uv pip`）；同时包含 `pyproject.toml` 和 `requirements.txt` 的插件在锁定步骤失败 | 从 `uv lock` 调用中移除 `--python-platform`；将 `--python-version` 替换为 `--python` |
 | 6 | 离线 `uv lock` 重新生成时，因 dev 依赖（如 `black`、`pytest`）未被下载为 wheel 而失败 | 完全移除离线重锁步骤——从 PyPI 下载的 wheel 与原始 `uv.lock` 中的 hash 完全一致，无需重新生成；同时为 `uv export` 添加 `--no-dev` 以排除 dev 依赖的下载 |
-| 7 | 同时包含 `pyproject.toml` 和 `requirements.txt` 的插件，原来会直接使用插件自带的 requirements.txt；但该文件往往不包含框架包的间接依赖（如 `dify-plugin → socksio`），导致运行时 `uv sync` 在 `no-index = true` 环境下找不到包而失败 | 只要 `pyproject.toml` 存在且 uv 可用，始终通过 `uv export` 重新生成完整的依赖列表（覆盖自带的 requirements.txt）；已有 `uv.lock` 则直接复用，否则先在线生成 |
+| 7 | 插件自带的 `uv.lock` 通常在 Dify 开发环境中生成，那里 `dify-plugin` 已预装，因此锁文件缺少其传递依赖（如 `socksio`），导致运行时 `uv sync` 在 `no-index = true` 下报依赖不满足 | 始终执行 `uv lock`（即使 `uv.lock` 已存在），以增量方式更新锁文件——已锁定的版本保持不变，缺失的传递依赖被补全；再通过 `uv export` 生成完整的 requirements.txt |
 
 ---
 
