@@ -318,9 +318,9 @@ PY
 		echo "✓ uv.lock resolved successfully"
 
 		echo "Exporting complete requirements.txt from uv.lock (all transitive deps, no dev)..."
-		uv export --format requirements-txt --no-hashes --no-dev -o requirements.txt \
-			${UV_PLATFORM:+--python-platform ${UV_PLATFORM}} \
-			--python-version "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG}
+		uv export --format requirements-txt --no-hashes --no-dev \
+			--python "${UV_PY_VERSION}" ${UV_PRERELEASE_FLAG} \
+			-o requirements.txt
 		if [[ $? -ne 0 ]]; then
 			echo "✗ Error: uv export failed"
 			exit 1
@@ -374,7 +374,7 @@ PY
 			-r requirements.txt \
 			-o ./wheels \
 			${RAW_PLATFORM:+--python-platform ${RAW_PLATFORM}} \
-			--python-version "${UV_PY_VERSION}" \
+			--python "${UV_PY_VERSION}" \
 			${UV_PRERELEASE_FLAG} \
 			--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
 		# If cross-platform download failed, retry without --python-platform to pick up
@@ -384,7 +384,7 @@ PY
 			uv pip download \
 				-r requirements.txt \
 				-o ./wheels \
-				--python-version "${UV_PY_VERSION}" \
+				--python "${UV_PY_VERSION}" \
 				${UV_PRERELEASE_FLAG} \
 				--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
 		fi
