@@ -374,17 +374,29 @@ PY
 	if command -v uv &> /dev/null && uv pip download --help > /dev/null 2>&1; then
 		echo "Using uv pip download for consistent resolver..."
 		UV_DL_STATUS=0
-		uv pip download \
-			-r requirements.txt \
-			-o ./wheels \
-			${RAW_PLATFORM:+--python-platform ${RAW_PLATFORM}} \
-			--python-version "${UV_PY_VERSION}" \
-			${UV_PRERELEASE_FLAG} \
-			--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
-		# If cross-platform download failed, retry without --python-platform to pick up
-		# sdist-only pure-Python packages that have no platform-specific wheel
-		if [[ $UV_DL_STATUS -ne 0 ]] && [[ -n "$RAW_PLATFORM" ]]; then
-			echo "⚠ Cross-platform uv download incomplete; retrying without --python-platform for sdist-only packages..."
+		if [[ -n "$RAW_PLATFORM" ]]; then
+			# Cross-platform: two passes are always required.
+			# Pass 1: binary wheels for the explicit target platform.
+			# uv silently skips py3-none-any (pure-Python) wheels when
+			# --python-platform is set, so pass 1 alone is incomplete.
+			echo "Pass 1: binary wheels for ${RAW_PLATFORM}..."
+			uv pip download \
+				-r requirements.txt \
+				-o ./wheels \
+				--python-platform "${RAW_PLATFORM}" \
+				--python-version "${UV_PY_VERSION}" \
+				${UV_PRERELEASE_FLAG} \
+				--index-url "${PIP_MIRROR_URL}" || true
+			# Pass 2: platform-independent (none-any) wheels + any binary that
+			# pass 1 may have missed.  Files already present are skipped by uv.
+			echo "Pass 2: platform-independent and remaining packages..."
+			uv pip download \
+				-r requirements.txt \
+				-o ./wheels \
+				--python-version "${UV_PY_VERSION}" \
+				${UV_PRERELEASE_FLAG} \
+				--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
+		else
 			uv pip download \
 				-r requirements.txt \
 				-o ./wheels \
