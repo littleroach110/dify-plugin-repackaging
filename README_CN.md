@@ -19,6 +19,7 @@
 | 5 | `uv lock` 不接受 `--python-platform` 和 `--python-version` 参数（这两个参数只属于 `uv export` / `uv pip`）；同时包含 `pyproject.toml` 和 `requirements.txt` 的插件在锁定步骤失败 | 从 `uv lock` 调用中移除 `--python-platform`；将 `--python-version` 替换为 `--python` |
 | 6 | 离线 `uv lock` 重新生成时，因 dev 依赖（如 `black`、`pytest`）未被下载为 wheel 而失败 | 完全移除离线重锁步骤——从 PyPI 下载的 wheel 与原始 `uv.lock` 中的 hash 完全一致，无需重新生成；同时为 `uv export` 添加 `--no-dev` 以排除 dev 依赖的下载 |
 | 7 | 插件自带的 `uv.lock` 通常在 Dify 开发环境中生成，那里 `dify-plugin` 已预装，因此锁文件缺少其传递依赖（如 `socksio`），导致运行时 `uv sync` 在 `no-index = true` 下报依赖不满足 | 始终执行 `uv lock`（即使 `uv.lock` 已存在），以增量方式更新锁文件——已锁定的版本保持不变，缺失的传递依赖被补全；再通过 `uv export` 生成完整的 requirements.txt |
+| 8 | `uv pip download` 使用 `--python-version`（指定目标 Python 版本用于 marker 求值），而非 `--python`（指定解释器路径）；误用 `--python` 导致 uv 下载静默失败，回退到 pip，pip 再在 C 扩展 sdist（如 `greenlet`）上报错 | 将 `uv pip download` 恢复为 `--python-version`；只有 `uv lock` 和 `uv export` 使用 `--python`（这两个命令在 uv 0.11.x 中移除了 `--python-version`） |
 
 ---
 

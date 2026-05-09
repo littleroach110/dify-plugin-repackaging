@@ -374,7 +374,7 @@ PY
 			-r requirements.txt \
 			-o ./wheels \
 			${RAW_PLATFORM:+--python-platform ${RAW_PLATFORM}} \
-			--python "${UV_PY_VERSION}" \
+			--python-version "${UV_PY_VERSION}" \
 			${UV_PRERELEASE_FLAG} \
 			--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
 		# If cross-platform download failed, retry without --python-platform to pick up
@@ -384,7 +384,7 @@ PY
 			uv pip download \
 				-r requirements.txt \
 				-o ./wheels \
-				--python "${UV_PY_VERSION}" \
+				--python-version "${UV_PY_VERSION}" \
 				${UV_PRERELEASE_FLAG} \
 				--index-url "${PIP_MIRROR_URL}" || UV_DL_STATUS=$?
 		fi
