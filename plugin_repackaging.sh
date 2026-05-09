@@ -173,6 +173,7 @@ repackage(){
 		[ -f "$PYFILE" ] || return 0
 	awk '
 		BEGIN { in_uv=0; saw_uv=0; saw_no=0; saw_find=0; saw_pre=0 }
+		{ gsub(/\r$/, "") }
 		function print_missing(){ if (!saw_no) print "no-index = true"; if (!saw_find) print "find-links = [\"./wheels\"]"; if (!saw_pre) print "prerelease = \"allow\"" }
 		/^[ \t]*\[tool\.uv\][ \t]*$/ { saw_uv=1; in_uv=1; saw_no=0; saw_find=0; saw_pre=0; print; next }
 		{ if (in_uv && $0 ~ /^[ \t]*\[/) { print_missing(); in_uv=0 } }
@@ -480,6 +481,18 @@ PY
 		inject_uv_into_pyproject "pyproject.toml"
 	fi
 
+	# Write uv.toml as the primary offline configuration source.
+	# uv reads uv.toml in the project directory with higher precedence than [tool.uv] in
+	# pyproject.toml. This provides reliable offline config regardless of the plugin's
+	# existing pyproject.toml structure, CRLF line endings, or other injection edge cases.
+	echo "Writing uv.toml for offline configuration..."
+	cat > uv.toml << 'UVTOML'
+no-index = true
+find-links = ["./wheels"]
+prerelease = "allow"
+UVTOML
+	echo "✓ uv.toml written"
+
 	# uv.lock is intentionally NOT regenerated here.
 	# The wheels downloaded in Step 3 come from the same PyPI index that produced the
 	# original uv.lock, so their hashes are already consistent.  The [tool.uv] injection
@@ -493,11 +506,11 @@ PY
 	if [[ "linux" == "$OS_TYPE" ]]; then
 		sed -i '1i\--no-index --find-links=./wheels/' requirements.txt
 		[ -f ".difyignore" ] && IGNORE_PATH=.difyignore || IGNORE_PATH=.gitignore
-		[ -f "$IGNORE_PATH" ] && sed -i '/^wheels\//d' "${IGNORE_PATH}"
+		[ -f "$IGNORE_PATH" ] && sed -E -i '/^\/?wheels([\/].*|[\/]?[*])?$/d; /^\/?uv[.]toml$/d' "${IGNORE_PATH}"
 	elif [[ "darwin" == "$OS_TYPE" ]]; then
 		sed -i ".bak" '1i\--no-index --find-links=./wheels/' requirements.txt && rm -f requirements.txt.bak
 		[ -f ".difyignore" ] && IGNORE_PATH=.difyignore || IGNORE_PATH=.gitignore
-		[ -f "$IGNORE_PATH" ] && sed -i ".bak" '/^wheels\//d' "${IGNORE_PATH}" && rm -f "${IGNORE_PATH}.bak"
+		[ -f "$IGNORE_PATH" ] && sed -E -i ".bak" '/^\/?wheels([\/].*|[\/]?[*])?$/d; /^\/?uv[.]toml$/d' "${IGNORE_PATH}" && rm -f "${IGNORE_PATH}.bak"
 	fi
 	echo "✓ requirements.txt updated for offline mode"
 
