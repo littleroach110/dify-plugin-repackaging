@@ -416,9 +416,55 @@ PY
 		fi
 	fi
 
-	# Count downloaded wheels
-	WHEEL_COUNT=$(ls -1 ./wheels/*.whl 2>/dev/null | wc -l)
-	echo "✓ Downloaded $WHEEL_COUNT wheel packages"
+	# ---- Safety-net pip pass (always runs, regardless of primary download method) ----
+	# The primary uv/pip download may silently omit py*-none-any (pure-Python) wheels
+	# when --python-platform is set. Running pip without platform constraints here
+	# guarantees those wheels are present.
+	# Pass A: --only-binary  → downloads none-any + any available binary, no sdist builds
+	# Pass B: --no-deps      → catches sdist-only pure-Python packages without triggering
+	#                          C-extension compilation (no build-deps installed)
+	echo "Safety-net pip pass (catching platform-independent packages)..."
+	env -u PIP_PLATFORM ${PIP_CMD} download \
+		--only-binary=:all: --prefer-binary \
+		-r requirements.txt -d ./wheels \
+		--index-url "${PIP_MIRROR_URL}" --trusted-host mirrors.aliyun.com \
+		> /dev/null 2>&1 || true
+	env -u PIP_PLATFORM ${PIP_CMD} download \
+		--no-deps --prefer-binary \
+		-r requirements.txt -d ./wheels \
+		--index-url "${PIP_MIRROR_URL}" --trusted-host mirrors.aliyun.com \
+		> /dev/null 2>&1 || true
+
+	WHEEL_COUNT=$(ls -1 ./wheels/ 2>/dev/null | wc -l | tr -d ' ')
+	echo "✓ Total items in ./wheels/: ${WHEEL_COUNT}"
+
+	# ---- Verify every requirement has a corresponding file in ./wheels/ ----
+	# Fail here rather than producing a silently broken offline package.
+	echo "Verifying wheel coverage for all requirements..."
+	MISSING_PKGS=0
+	while IFS= read -r REQ_LINE; do
+		[[ -z "${REQ_LINE}" || "${REQ_LINE}" =~ ^[[:space:]]*(#|-) ]] && continue
+		PKG=$(printf '%s' "${REQ_LINE}" \
+			| sed 's/[[:space:]]*[>=<!=\[;@].*//' \
+			| tr '[:upper:]' '[:lower:]' | tr '-' '_' | tr -d ' ')
+		[[ -z "${PKG}" ]] && continue
+		if ! ls ./wheels/ 2>/dev/null \
+				| tr '[:upper:]' '[:lower:]' \
+				| grep -q "^${PKG}[_-]"; then
+			echo "  ⚠ Missing wheel: ${REQ_LINE}"
+			MISSING_PKGS=$((MISSING_PKGS + 1))
+		fi
+	done < requirements.txt
+	if [[ ${MISSING_PKGS} -gt 0 ]]; then
+		echo ""
+		echo "✗ Error: ${MISSING_PKGS} package(s) listed in requirements.txt have no"
+		echo "  corresponding file in ./wheels/. The offline package would fail at runtime."
+		echo "  Possible causes:"
+		echo "    - No binary wheel available for the target platform (C-extension package)"
+		echo "    - Package version not yet published on PyPI"
+		exit 1
+	fi
+	echo "✓ All ${WHEEL_COUNT} requirements verified in ./wheels/"
 
 	# ============================================
 	# Step 4: Configure offline mode
