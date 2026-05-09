@@ -358,7 +358,11 @@ PY
 			--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com || status=$?
 		if [[ $status -ne 0 ]] && [[ -n "$PIP_PLATFORM" ]]; then
 			echo "⚠ Binary-only pass incomplete; retrying with --no-deps for sdist-only packages..."
-			${PIP_CMD} download --no-deps --prefer-binary -r requirements.txt -d ./wheels \
+			# Unset PIP_PLATFORM so pip does not auto-apply --platform to this pass.
+			# PIP_<OPTION> env vars are read by pip; an inherited PIP_PLATFORM would
+			# re-apply the platform constraint and break sdist-only package downloads.
+			env -u PIP_PLATFORM ${PIP_CMD} download --no-deps --prefer-binary \
+				-r requirements.txt -d ./wheels \
 				--index-url ${PIP_MIRROR_URL} --trusted-host mirrors.aliyun.com
 			return $?
 		fi
@@ -367,7 +371,7 @@ PY
 
 	mkdir -p ./wheels
 	echo "Downloading wheels to ./wheels/..."
-	if command -v uv &> /dev/null; then
+	if command -v uv &> /dev/null && uv pip download --help > /dev/null 2>&1; then
 		echo "Using uv pip download for consistent resolver..."
 		UV_DL_STATUS=0
 		uv pip download \
