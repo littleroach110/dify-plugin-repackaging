@@ -441,10 +441,48 @@ PY
 
 	# ---- Verify every requirement has a corresponding file in ./wheels/ ----
 	# Fail here rather than producing a silently broken offline package.
+	# Requirements with platform markers that do not apply to the target OS are skipped
+	# (e.g. Windows-only packages when building for Linux).
 	echo "Verifying wheel coverage for all requirements..."
+
+	# Determine target sys_platform for marker evaluation
+	_TARGET_SYS="$OS_TYPE"  # linux or darwin
+	if [[ -n "$RAW_PLATFORM" ]]; then
+		case "$RAW_PLATFORM" in
+			*linux*|*manylinux*) _TARGET_SYS="linux" ;;
+			*win*)               _TARGET_SYS="win32" ;;
+			*darwin*|*macos*)    _TARGET_SYS="darwin" ;;
+		esac
+	fi
+
 	MISSING_PKGS=0
 	while IFS= read -r REQ_LINE; do
 		[[ -z "${REQ_LINE}" || "${REQ_LINE}" =~ ^[[:space:]]*(#|-) ]] && continue
+		# Skip packages whose platform marker doesn't apply to the target OS.
+		# Handles the most common cases: sys_platform and os_name equality tests.
+		if [[ "${REQ_LINE}" == *";"* ]]; then
+			_MARKER="${REQ_LINE#*;}"
+			# Windows-only (sys_platform == 'win32' or os_name == 'nt')
+			if [[ "$_TARGET_SYS" != "win32" ]] && \
+			   printf '%s' "$_MARKER" | grep -qE "(sys_platform|os[._]name)\s*==\s*['\"]?(win32|nt)['\"]?"; then
+				continue
+			fi
+			# Linux-only
+			if [[ "$_TARGET_SYS" != "linux" ]] && \
+			   printf '%s' "$_MARKER" | grep -qE "sys_platform\s*==\s*['\"]?linux['\"]?"; then
+				continue
+			fi
+			# macOS-only
+			if [[ "$_TARGET_SYS" != "darwin" ]] && \
+			   printf '%s' "$_MARKER" | grep -qE "sys_platform\s*==\s*['\"]?darwin['\"]?"; then
+				continue
+			fi
+			# POSIX-only (os_name == 'posix') when targeting Windows
+			if [[ "$_TARGET_SYS" == "win32" ]] && \
+			   printf '%s' "$_MARKER" | grep -qE "os[._]name\s*==\s*['\"]?posix['\"]?"; then
+				continue
+			fi
+		fi
 		PKG=$(printf '%s' "${REQ_LINE}" \
 			| sed 's/[[:space:]]*[>=<!=\[;@].*//' \
 			| tr '[:upper:]' '[:lower:]' | tr '-' '_' | tr -d ' ')
